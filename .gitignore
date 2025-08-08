@@ -3,3 +3,4 @@ logs/
 *user-data*
 .env
 last-output.txt
+last-data.json

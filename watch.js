@@ -5,12 +5,14 @@ const { chromium } = await import("playwright");
 import * as fs from "fs/promises";
 import fetch from "node-fetch";
 
-const WEBHOOK = process.env.SLACK_WEBHOOK || "";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 const PRICE_DROP_THRESHOLD = parseInt(
 	process.env.PRICE_DROP_THRESHOLD || "25",
 	10,
 );
-const STATE_FILE = "./last-output.txt";
+const STATE_FILE = "./last-data.json";
+const DISPLAY_FILE = "./last-output.txt";
 
 const extractor = `
 (() => {
@@ -136,14 +138,19 @@ const extractor = `
 `;
 
 async function post(text) {
-	if (!WEBHOOK) {
+	if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
 		console.log(text);
 		return;
 	}
-	await fetch(WEBHOOK, {
+	const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+	await fetch(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ text }),
+		body: JSON.stringify({
+			chat_id: TELEGRAM_CHAT_ID,
+			text: text,
+			parse_mode: "Markdown",
+		}),
 	});
 }
 
@@ -230,31 +237,76 @@ async function main() {
 		)
 		.join("\\n");
 
-	// console.log("DEBUG: Final output:", JSON.stringify(output));
+	// Parse flights into structured format
+	const structuredFlights = data.flights
+		.map((line) => {
+			const parts = line.split(" :: ");
+			if (parts.length !== 2) return null;
 
-	// diff vs last
-	let last = "";
+			const flightInfo = parts[0].trim();
+			const priceInfo = parts[1].trim();
+
+			// Extract current price (look for $XXX at start)
+			const priceMatch = priceInfo.match(/^\$(\d[\d,]*)/);
+			if (!priceMatch) return null;
+			const currentPrice = parseInt(priceMatch[1].replace(/,/g, ""), 10);
+
+			// Extract "was" price if present
+			const wasMatch = priceInfo.match(/was \$(\d[\d,]*)/);
+			const wasPrice = wasMatch
+				? parseInt(wasMatch[1].replace(/,/g, ""), 10)
+				: null;
+
+			// Generate flight ID from the flight info for matching
+			const id = flightInfo.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-");
+
+			return {
+				id,
+				flightInfo,
+				currentPrice,
+				wasPrice,
+				fullLine: line,
+			};
+		})
+		.filter(Boolean);
+
+	// console.log('DEBUG: Parsed', structuredFlights.length, 'flights');
+
+	// Load previous data
+	let lastData = { timestamp: null, flights: [] };
 	try {
-		last = await fs.readFile(STATE_FILE, "utf8");
+		const lastJson = await fs.readFile(STATE_FILE, "utf8");
+		lastData = JSON.parse(lastJson);
 	} catch {}
-	await fs.writeFile(STATE_FILE, output, "utf8");
 
-	// Parse flight price drops from current output
+	// Create current data structure
+	const currentData = {
+		timestamp: now,
+		flights: structuredFlights,
+	};
+
+	// Save current data
+	await fs.writeFile(STATE_FILE, JSON.stringify(currentData, null, 2), "utf8");
+	await fs.writeFile(DISPLAY_FILE, output, "utf8");
+
+	// Compare prices with last run and find drops
 	const drops = [];
-	for (const line of data.flights) {
-		const m = line.match(
-			/::\\s*\\$(\\d[\\d,]*)\\b(?:\\s*\\|\\s*was\\s*\\$(\\d[\\d,]*))?/,
-		);
-		if (!m) continue;
-		const curr = parseInt(m[1].replace(/,/g, ""), 10);
-		const was = m[2] ? parseInt(m[2].replace(/,/g, ""), 10) : null;
-		const delta = was ? was - curr : 0;
-		if (delta >= PRICE_DROP_THRESHOLD) drops.push({ line, delta });
+	for (const currentFlight of structuredFlights) {
+		const lastFlight = lastData.flights.find((f) => f.id === currentFlight.id);
+		if (lastFlight && lastFlight.currentPrice > currentFlight.currentPrice) {
+			const delta = lastFlight.currentPrice - currentFlight.currentPrice;
+			if (delta >= PRICE_DROP_THRESHOLD) {
+				const dropLine = `${currentFlight.flightInfo} :: $${currentFlight.currentPrice.toLocaleString()} | was $${lastFlight.currentPrice.toLocaleString()}`;
+				drops.push({ line: dropLine, delta });
+			}
+		}
 	}
+
+	// console.log('DEBUG: Drops', drops);
 
 	if (drops.length) {
 		await post(
-			`*Google Flights price drop(s) — ${now}*\\n\\\n\\\n\`\`\`\\n${drops.map((d) => d.line).join("\\n")}\\n\`\`\``,
+			`*Google Flights price drop(s) — ${now}*\n\n\`\`\`\n${drops.map((d) => d.line).join("\n")}\n\`\`\``,
 		);
 	}
 
