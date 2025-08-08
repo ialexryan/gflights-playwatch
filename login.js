@@ -1,27 +1,11 @@
 const { chromium } = await import("playwright");
 
-import fs from "fs/promises";
-
 (async () => {
-	const channel = process.env.PLAYWRIGHT_CHANNEL || "chrome";
-	let ctx;
-	try {
-		ctx = await chromium.launchPersistentContext("./user-data", {
-			channel,
-			headless: false,
-			viewport: { width: 1280, height: 900 },
-			args: ["--disable-blink-features=AutomationControlled"],
-		});
-	} catch (e) {
-		console.warn(
-			`> Could not use channel="${channel}", falling back to bundled Chromium.`,
-		);
-		ctx = await chromium.launchPersistentContext("./user-data", {
-			headless: false,
-			viewport: { width: 1280, height: 900 },
-			args: ["--disable-blink-features=AutomationControlled"],
-		});
-	}
+	const ctx = await chromium.launchPersistentContext("./user-data", {
+		headless: false,
+		viewport: { width: 1280, height: 900 },
+		args: ["--disable-blink-features=AutomationControlled"],
+	});
 	const page = await ctx.newPage();
 	await page.goto("https://www.google.com/travel/flights/saves", {
 		waitUntil: "domcontentloaded",

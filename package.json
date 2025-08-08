@@ -1,16 +1,16 @@
 {
-  "name": "gflights-playwatch",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "login": "node login.js",
-    "watch": "node watch.js",
-    "postinstall": "npx playwright install chromium"
-  },
-  "dependencies": {
-    "dotenv": "^16.4.5",
-    "node-fetch": "^2.7.0",
-    "playwright": "^1.46.0"
-  }
+	"name": "gflights-playwatch",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"login": "node login.js",
+		"watch": "node watch.js",
+		"postinstall": "npx playwright install chromium"
+	},
+	"dependencies": {
+		"dotenv": "^16.4.5",
+		"node-fetch": "^2.7.0",
+		"playwright": "^1.46.0"
+	}
 }

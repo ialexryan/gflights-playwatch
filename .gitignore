@@ -1,4 +1,5 @@
 node_modules/
 logs/
-user-data/
+*user-data*
 .env
+last-output.txt

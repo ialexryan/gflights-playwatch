@@ -1,4 +1,4 @@
-\
+import { exec } from "child_process";
 import "dotenv/config";
 const { chromium } = await import("playwright");
 
@@ -148,25 +148,28 @@ async function post(text) {
 }
 
 async function main() {
-	const channel = process.env.PLAYWRIGHT_CHANNEL || "chrome";
-	let ctx;
-	try {
-		ctx = await chromium.launchPersistentContext("./user-data", {
-			channel,
-			headless: true,
-			args: ["--disable-blink-features=AutomationControlled"],
-		});
-	} catch (e) {
-		console.warn(
-			`> Could not use channel="${channel}", falling back to bundled Chromium.`,
-		);
-		ctx = await chromium.launchPersistentContext("./user-data", {
-			headless: true,
-			args: ["--disable-blink-features=AutomationControlled"],
-		});
-	}
+	const ctx = await chromium.launchPersistentContext("./user-data", {
+		headless: false,
+		viewport: { width: 1280, height: 900 },
+		args: [
+			"--disable-blink-features=AutomationControlled",
+			"--start-minimized",
+			"--window-position=20000,20000",
+			"--disable-background-timer-throttling",
+			"--disable-backgrounding-occluded-windows",
+			"--disable-renderer-backgrounding",
+		],
+	});
+
+	exec(
+		`osascript -e 'tell application "System Events" to set visible of application process "Chromium" to false'`,
+		(err) => {
+			if (err) console.warn("AppleScript hide failed", err?.message);
+		},
+	);
 
 	const page = await ctx.newPage();
+
 	await page.goto("https://www.google.com/travel/flights/saves", {
 		waitUntil: "domcontentloaded",
 		timeout: 60000,
@@ -189,15 +192,34 @@ async function main() {
 	// Let SPA settle and load all tiles (basic scroll)
 	await page.waitForTimeout(3500);
 	try {
-		await page.mouse.wheel(0, 1400);
+		await page.mouse.wheel(0, 14000);
 	} catch {}
 	await page.waitForTimeout(800);
+
+	// Debug: Check what elements exist on the page
+	// const debugInfo = await page.evaluate(() => {
+	// 	const cards = document.querySelectorAll(".U5HQrd");
+	// 	const priceTexts = document.querySelectorAll(
+	// 		'[jsname="z6Z3R"] [role="text"]',
+	// 	);
+	// 	const cheapestFlight = document.querySelectorAll(".U5HQrd .KHLctd .ogfYpf");
+	// 	return {
+	// 		cardCount: cards.length,
+	// 		priceTextCount: priceTexts.length,
+	// 		cheapestFlightCount: cheapestFlight.length,
+	// 		pageTitle: document.title,
+	// 		bodyText: document.body.innerText.substring(0, 500),
+	// 	};
+	// });
+	// console.log("DEBUG: Page info:", JSON.stringify(debugInfo, null, 2));
 
 	const data = await page.evaluate(extractor).catch(async (e) => {
 		await ctx.close();
 		throw e;
 	});
 	await ctx.close();
+
+	// console.log("DEBUG: Extracted data:", JSON.stringify(data, null, 2));
 
 	const now = new Date().toISOString().slice(0, 16).replace("T", " ");
 	const output = data.flights
@@ -207,6 +229,8 @@ async function main() {
 				: [],
 		)
 		.join("\\n");
+
+	// console.log("DEBUG: Final output:", JSON.stringify(output));
 
 	// diff vs last
 	let last = "";
