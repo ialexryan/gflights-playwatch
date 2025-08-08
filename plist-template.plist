@@ -1,0 +1,24 @@
+\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.gflights.playwatch</string>
+
+  <!-- Run every 15 minutes -->
+  <key>StartInterval</key><integer>900</integer>
+
+  <!-- Keep logs in project folder -->
+  <key>StandardOutPath</key><string>__PROJECT_DIR__/logs/watch.log</string>
+  <key>StandardErrorPath</key><string>__PROJECT_DIR__/logs/watch.err</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__PROJECT_DIR__/bin/run-watch.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key><string>__PROJECT_DIR__</string>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
