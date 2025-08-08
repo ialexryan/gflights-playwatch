@@ -1,4 +1,3 @@
-\
 SHELL := /bin/bash
 PROJECT_DIR := $(shell pwd)
 LAUNCH_AGENT_NAME := com.gflights.playwatch

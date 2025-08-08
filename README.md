@@ -4,7 +4,6 @@ A tiny **local** Playwright watcher that reads your **Google Flights Saved** pag
 extracts prices + labels, and alerts you in Slack when prices **drop by ≥ threshold**.
 
 - Runs **locally** with a **persistent browser profile** (no passwords in code).
-- Uses **Chrome channel** if installed; falls back to bundled Chromium.
 - Column-aligned, date-first output; includes **flight numbers** and **routes**.
 - Handles **Cheapest flight** watch tiles too (listed after flights).
 
@@ -45,7 +44,6 @@ The LaunchAgent calls `bin/run-watch.sh`, which sleeps a random 0–90 seconds, 
 ## Security Notes
 - All auth lives in `./user-data/` (your Playwright browser profile). **Keep it private.** `.gitignore` excludes it.
 - The watcher only loads `https://www.google.com/travel/flights/saves` and posts to your Slack webhook (if set).
-- Want **Chrome** instead of Playwright's Chromium? It's already configured (`channel: "chrome"`). If Chrome isn't installed, it falls back automatically.
 
 ## Re‑auth flow
 If Google asks to verify again (rare), the watch run will post a Slack message saying **"Reauth needed"**.
