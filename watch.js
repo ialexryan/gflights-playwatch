@@ -1,12 +1,16 @@
 \
-import 'dotenv/config';
-const { chromium } = await import('playwright');
-import fetch from 'node-fetch';
-import * as fs from 'fs/promises';
+import "dotenv/config";
+const { chromium } = await import("playwright");
 
-const WEBHOOK = process.env.SLACK_WEBHOOK || '';
-const PRICE_DROP_THRESHOLD = parseInt(process.env.PRICE_DROP_THRESHOLD || '25', 10);
-const STATE_FILE = './last-output.txt';
+import * as fs from "fs/promises";
+import fetch from "node-fetch";
+
+const WEBHOOK = process.env.SLACK_WEBHOOK || "";
+const PRICE_DROP_THRESHOLD = parseInt(
+	process.env.PRICE_DROP_THRESHOLD || "25",
+	10,
+);
+const STATE_FILE = "./last-output.txt";
 
 const extractor = `
 (() => {
@@ -132,82 +136,112 @@ const extractor = `
 `;
 
 async function post(text) {
-  if (!WEBHOOK) {
-    console.log(text);
-    return;
-  }
-  await fetch(WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+	if (!WEBHOOK) {
+		console.log(text);
+		return;
+	}
+	await fetch(WEBHOOK, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ text }),
+	});
 }
 
 async function main() {
-  const channel = process.env.PLAYWRIGHT_CHANNEL || 'chrome';
-  let ctx;
-  try {
-    ctx = await chromium.launchPersistentContext('./user-data', {
-      channel,
-      headless: true,
-      args: ['--disable-blink-features=AutomationControlled'],
-    });
-  } catch (e) {
-    console.warn(`> Could not use channel="${channel}", falling back to bundled Chromium.`);
-    ctx = await chromium.launchPersistentContext('./user-data', {
-      headless: true,
-      args: ['--disable-blink-features=AutomationControlled'],
-    });
-  }
+	const channel = process.env.PLAYWRIGHT_CHANNEL || "chrome";
+	let ctx;
+	try {
+		ctx = await chromium.launchPersistentContext("./user-data", {
+			channel,
+			headless: true,
+			args: ["--disable-blink-features=AutomationControlled"],
+		});
+	} catch (e) {
+		console.warn(
+			`> Could not use channel="${channel}", falling back to bundled Chromium.`,
+		);
+		ctx = await chromium.launchPersistentContext("./user-data", {
+			headless: true,
+			args: ["--disable-blink-features=AutomationControlled"],
+		});
+	}
 
-  const page = await ctx.newPage();
-  await page.goto('https://www.google.com/travel/flights/saves', { waitUntil: 'domcontentloaded', timeout: 60000 });
+	const page = await ctx.newPage();
+	await page.goto("https://www.google.com/travel/flights/saves", {
+		waitUntil: "domcontentloaded",
+		timeout: 60000,
+	});
 
-  // If Google kicked us to login/verify, notify and bail fast
-  const url = page.url();
-  const html = await page.content();
-  if (/ServiceLogin|accounts\.google\.com/.test(url) || /Verify it'?s you/i.test(html)) {
-    await ctx.close();
-    await post('*Google Flights watcher:* Reauth needed. Run `npm run login` to refresh the session.');
-    return;
-  }
+	// If Google kicked us to login/verify, notify and bail fast
+	const url = page.url();
+	const html = await page.content();
+	if (
+		/ServiceLogin|accounts\.google\.com/.test(url) ||
+		/Verify it'?s you/i.test(html)
+	) {
+		await ctx.close();
+		await post(
+			"*Google Flights watcher:* Reauth needed. Run `npm run login` to refresh the session.",
+		);
+		return;
+	}
 
-  // Let SPA settle and load all tiles (basic scroll)
-  await page.waitForTimeout(3500);
-  try { await page.mouse.wheel(0, 1400); } catch {}
-  await page.waitForTimeout(800);
+	// Let SPA settle and load all tiles (basic scroll)
+	await page.waitForTimeout(3500);
+	try {
+		await page.mouse.wheel(0, 1400);
+	} catch {}
+	await page.waitForTimeout(800);
 
-  const data = await page.evaluate(extractor).catch(async (e) => {
-    await ctx.close();
-    throw e;
-  });
-  await ctx.close();
+	const data = await page.evaluate(extractor).catch(async (e) => {
+		await ctx.close();
+		throw e;
+	});
+	await ctx.close();
 
-  const now = new Date().toISOString().slice(0,16).replace('T',' ');
-  const output = data.flights.concat(data.watches.length ? ['--- Watches (no specific date) ---', ...data.watches] : []).join('\\n');
+	const now = new Date().toISOString().slice(0, 16).replace("T", " ");
+	const output = data.flights
+		.concat(
+			data.watches.length
+				? ["--- Watches (no specific date) ---", ...data.watches]
+				: [],
+		)
+		.join("\\n");
 
-  // diff vs last
-  let last = '';
-  try { last = await fs.readFile(STATE_FILE, 'utf8'); } catch {}
-  await fs.writeFile(STATE_FILE, output, 'utf8');
+	// diff vs last
+	let last = "";
+	try {
+		last = await fs.readFile(STATE_FILE, "utf8");
+	} catch {}
+	await fs.writeFile(STATE_FILE, output, "utf8");
 
-  // Parse flight price drops from current output
-  const drops = [];
-  for (const line of data.flights) {
-    const m = line.match(/::\\s*\\$(\\d[\\d,]*)\\b(?:\\s*\\|\\s*was\\s*\\$(\\d[\\d,]*))?/);
-    if (!m) continue;
-    const curr = parseInt(m[1].replace(/,/g,''),10);
-    const was  = m[2] ? parseInt(m[2].replace(/,/g,''),10) : null;
-    const delta = was ? (was - curr) : 0;
-    if (delta >= PRICE_DROP_THRESHOLD) drops.push({ line, delta });
-  }
+	// Parse flight price drops from current output
+	const drops = [];
+	for (const line of data.flights) {
+		const m = line.match(
+			/::\\s*\\$(\\d[\\d,]*)\\b(?:\\s*\\|\\s*was\\s*\\$(\\d[\\d,]*))?/,
+		);
+		if (!m) continue;
+		const curr = parseInt(m[1].replace(/,/g, ""), 10);
+		const was = m[2] ? parseInt(m[2].replace(/,/g, ""), 10) : null;
+		const delta = was ? was - curr : 0;
+		if (delta >= PRICE_DROP_THRESHOLD) drops.push({ line, delta });
+	}
 
-  if (drops.length) {
-    await post(`*Google Flights price drop(s) — ${now}*\\n\\\n\\\n\`\`\`\\n${drops.map(d=>d.line).join('\\n')}\\n\`\`\``);
-  }
+	if (drops.length) {
+		await post(
+			`*Google Flights price drop(s) — ${now}*\\n\\\n\\\n\`\`\`\\n${drops.map((d) => d.line).join("\\n")}\\n\`\`\``,
+		);
+	}
 
-  // Always print the full snapshot to console for local visibility
-  console.log(output);
+	// Always print the full snapshot to console for local visibility
+	console.log(output);
 }
 
 main().catch(async (e) => {
-  console.error('Watcher error:', e);
-  try { await post('*Google Flights watcher:* encountered an error. Check logs.'); } catch {}
-  process.exit(1);
+	console.error("Watcher error:", e);
+	try {
+		await post("*Google Flights watcher:* encountered an error. Check logs.");
+	} catch {}
+	process.exit(1);
 });
